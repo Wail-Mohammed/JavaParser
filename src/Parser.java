@@ -92,6 +92,7 @@ public class Parser {
     public static boolean syntaxCheck(String statement) {
         // Matches: type identifier = value;
         String pattern = "^(int|float|double|String)\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*=\\s*[^;]+;$";
+        // add another set of patterns for JAVA keywords
         boolean match = statement.trim().matches(pattern);
 
         if (match) {
