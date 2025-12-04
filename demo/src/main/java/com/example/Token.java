@@ -4,17 +4,17 @@ public class Token {
     public final TokenType type;
     public final String lexeme;
     public final int line;
-    public final int col;
+    public final int column;
 
-    public Token(TokenType type, String lexeme, int line, int col) {
+    public Token(TokenType type, String lexeme, int line, int column) {
         this.type = type;
         this.lexeme = lexeme;
         this.line = line;
-        this.col = col;
+        this.column = column;
     }
 
     @Override
     public String toString() {
-        return type + "('" + lexeme + "')@" + line + ":" + col;
+        return type + "('" + lexeme + "')@" + line + ":" + column;
     }
 }

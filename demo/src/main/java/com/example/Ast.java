@@ -1,15 +1,19 @@
 package com.example;
 
-import java.util.*;
+import java.util.List;
 
 public class Ast {
-    // === Expressions ===
+
+    // ===== Expressions =====
+
     public interface Expr {
         <R> R accept(ExprVisitor<R> v);
     }
 
     public interface ExprVisitor<R> {
         R visitInt(IntLiteral e);
+
+        R visitString(StringLiteral e);
 
         R visitVar(Var e);
 
@@ -29,6 +33,18 @@ public class Ast {
 
         public <R> R accept(ExprVisitor<R> v) {
             return v.visitInt(this);
+        }
+    }
+
+    public static class StringLiteral implements Expr {
+        public final String value;
+
+        public StringLiteral(String value) {
+            this.value = value;
+        }
+
+        public <R> R accept(ExprVisitor<R> v) {
+            return v.visitString(this);
         }
     }
 
@@ -77,8 +93,8 @@ public class Ast {
     public static class Grouping implements Expr {
         public final Expr inner;
 
-        public Grouping(Expr e) {
-            this.inner = e;
+        public Grouping(Expr inner) {
+            this.inner = inner;
         }
 
         public <R> R accept(ExprVisitor<R> v) {
@@ -86,7 +102,8 @@ public class Ast {
         }
     }
 
-    // === Statements ===
+    // ===== Statements =====
+
     public interface Stmt {
         void accept(StmtVisitor v);
     }
@@ -107,7 +124,7 @@ public class Ast {
 
     public static class VarDecl implements Stmt {
         public final String name;
-        public final Expr init; // init may be null
+        public final Expr init;
 
         public VarDecl(String name, Expr init) {
             this.name = name;
@@ -148,12 +165,12 @@ public class Ast {
     public static class If implements Stmt {
         public final Expr condition;
         public final Stmt thenBranch;
-        public final Stmt elseBranch; // else may be null
+        public final Stmt elseBranch; // may be null
 
-        public If(Expr c, Stmt t, Stmt e) {
-            this.condition = c;
-            this.thenBranch = t;
-            this.elseBranch = e;
+        public If(Expr condition, Stmt thenBranch, Stmt elseBranch) {
+            this.condition = condition;
+            this.thenBranch = thenBranch;
+            this.elseBranch = elseBranch;
         }
 
         public void accept(StmtVisitor v) {
@@ -165,9 +182,9 @@ public class Ast {
         public final Expr condition;
         public final Stmt body;
 
-        public While(Expr c, Stmt b) {
-            this.condition = c;
-            this.body = b;
+        public While(Expr condition, Stmt body) {
+            this.condition = condition;
+            this.body = body;
         }
 
         public void accept(StmtVisitor v) {

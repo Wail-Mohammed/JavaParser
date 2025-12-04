@@ -1,168 +1,173 @@
 package com.example;
 
-import java.util.*;
-import static com.example.TokenType.*;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.example.Ast.*;
 
 public class Parser {
-    private final List<Token> ts;
-    private int pos = 0;
+    private final List<Token> tokens;
+    private int current = 0;
 
     public Parser(List<Token> tokens) {
-        this.ts = tokens;
+        this.tokens = tokens;
     }
 
     public List<Stmt> parseProgram() {
-        List<Stmt> out = new ArrayList<>();
-        while (!match(EOF)) {
-            out.add(statement());
+        List<Stmt> stmts = new ArrayList<>();
+        while (!isAtEnd()) {
+            stmts.add(statement());
         }
-        return out;
+        return stmts;
     }
 
     private Stmt statement() {
-        if (match(KW_INT))
+        if (match(TokenType.KW_INT))
             return varDecl();
-        if (match(KW_PRINT))
+        if (match(TokenType.KW_PRINT))
             return printStmt();
-        if (match(KW_IF))
+        if (match(TokenType.KW_IF))
             return ifStmt();
-        if (match(KW_WHILE))
+        if (match(TokenType.KW_WHILE))
             return whileStmt();
-        if (match(L_BRACE))
-            return block();
-        // assignment
-        Token id = consume(IDENT, "Expected identifier");
-        consume(ASSIGN, "Expected '=' after identifier");
-        Expr value = expression();
-        consume(SEMI, "Expected ';' after assignment");
-        return new Assign(id.lexeme, value);
+        if (match(TokenType.LBRACE))
+            return blockStmt();
+
+        // assignment: IDENT '=' expr ';'
+        if (check(TokenType.IDENT) && checkNext(TokenType.EQUAL)) {
+            Token name = advance();
+            consume(TokenType.EQUAL, "Expected '=' after identifier");
+            Expr value = expression();
+            consume(TokenType.SEMICOLON, "Expected ';' after assignment");
+            return new Assign(name.lexeme, value);
+        }
+
+        throw error(peek(), "Unsupported statement (expected int/print/if/while/block/assignment)");
     }
 
     private Stmt varDecl() {
-        Token name = consume(IDENT, "Expected variable name after 'int'");
+        Token name = consume(TokenType.IDENT, "Expected variable name after 'int'");
         Expr init = null;
-        if (match(ASSIGN))
+        if (match(TokenType.EQUAL)) {
             init = expression();
-        consume(SEMI, "Expected ';' after declaration");
+        }
+        consume(TokenType.SEMICOLON, "Expected ';' after declaration");
         return new VarDecl(name.lexeme, init);
     }
 
     private Stmt printStmt() {
-        consume(L_PAREN, "Expected '(' after print");
-        Expr v = expression();
-        consume(R_PAREN, "Expected ')' after print expression");
-        consume(SEMI, "Expected ';' after print");
-        return new Print(v);
+        consume(TokenType.LPAREN, "Expected '(' after print");
+        Expr value = expression();
+        consume(TokenType.RPAREN, "Expected ')' after value");
+        consume(TokenType.SEMICOLON, "Expected ';' after print");
+        return new Print(value);
     }
 
     private Stmt ifStmt() {
-        consume(L_PAREN, "Expected '(' after if");
+        consume(TokenType.LPAREN, "Expected '(' after if");
         Expr cond = expression();
-        consume(R_PAREN, "Expected ')' after if condition");
-        Stmt thenB = statement();
-        Stmt elseB = null;
-        if (match(KW_ELSE))
-            elseB = statement();
-        return new If(cond, thenB, elseB);
+        consume(TokenType.RPAREN, "Expected ')' after condition");
+        Stmt thenBranch = statement();
+        Stmt elseBranch = null;
+        if (match(TokenType.KW_ELSE)) {
+            elseBranch = statement();
+        }
+        return new If(cond, thenBranch, elseBranch);
     }
 
     private Stmt whileStmt() {
-        consume(L_PAREN, "Expected '(' after while");
+        consume(TokenType.LPAREN, "Expected '(' after while");
         Expr cond = expression();
-        consume(R_PAREN, "Expected ')' after while condition");
+        consume(TokenType.RPAREN, "Expected ')' after condition");
         Stmt body = statement();
         return new While(cond, body);
     }
 
-    private Stmt block() {
-        List<Stmt> ss = new ArrayList<>();
-        while (!check(R_BRACE) && !check(EOF)) {
-            ss.add(statement());
+    private Stmt blockStmt() {
+        List<Stmt> stmts = new ArrayList<>();
+        while (!check(TokenType.RBRACE) && !isAtEnd()) {
+            stmts.add(statement());
         }
-        consume(R_BRACE, "Expected '}' to close block");
-        return new Block(ss);
+        consume(TokenType.RBRACE, "Expected '}' after block");
+        return new Block(stmts);
     }
 
-    // ---- Expressions (precedence & associativity) ----
+    // ===== expressions =====
+
     private Expr expression() {
-        return or();
-    }
-
-    private Expr or() {
-        Expr e = and();
-        while (match(OR_OR))
-            e = new Binary(e, "||", and());
-        return e;
-    }
-
-    private Expr and() {
-        Expr e = equality();
-        while (match(AND_AND))
-            e = new Binary(e, "&&", equality());
-        return e;
+        return equality();
     }
 
     private Expr equality() {
-        Expr e = comparison();
-        while (match(EQ, NE)) {
+        Expr expr = comparison();
+        while (match(TokenType.EQUAL_EQUAL, TokenType.BANG_EQUAL)) {
             Token op = previous();
-            e = new Binary(e, op.lexeme, comparison());
+            Expr right = comparison();
+            expr = new Binary(expr, op.lexeme, right);
         }
-        return e;
+        return expr;
     }
 
     private Expr comparison() {
-        Expr e = term();
-        while (match(LT, LE, GT, GE)) {
+        Expr expr = addition();
+        while (match(TokenType.LESS, TokenType.LESS_EQUAL,
+                TokenType.GREATER, TokenType.GREATER_EQUAL)) {
             Token op = previous();
-            e = new Binary(e, op.lexeme, term());
+            Expr right = addition();
+            expr = new Binary(expr, op.lexeme, right);
         }
-        return e;
+        return expr;
     }
 
-    private Expr term() {
-        Expr e = factor();
-        while (match(PLUS, MINUS)) {
+    private Expr addition() {
+        Expr expr = multiplication();
+        while (match(TokenType.PLUS, TokenType.MINUS)) {
             Token op = previous();
-            e = new Binary(e, op.lexeme, factor());
+            Expr right = multiplication();
+            expr = new Binary(expr, op.lexeme, right);
         }
-        return e;
+        return expr;
     }
 
-    private Expr factor() {
-        Expr e = unary();
-        while (match(STAR, SLASH)) {
+    private Expr multiplication() {
+        Expr expr = unary();
+        while (match(TokenType.STAR, TokenType.SLASH)) {
             Token op = previous();
-            e = new Binary(e, op.lexeme, unary());
+            Expr right = unary();
+            expr = new Binary(expr, op.lexeme, right);
         }
-        return e;
+        return expr;
     }
 
     private Expr unary() {
-        if (match(MINUS))
-            return new Unary("-", unary());
+        if (match(TokenType.MINUS)) {
+            Token op = previous();
+            Expr right = unary();
+            return new Unary(op.lexeme, right);
+        }
         return primary();
     }
 
     private Expr primary() {
-        if (match(INT_LITERAL))
+        if (match(TokenType.INT_LITERAL))
             return new IntLiteral(Integer.parseInt(previous().lexeme));
-        if (match(IDENT))
+        if (match(TokenType.STRING_LITERAL))
+            return new StringLiteral(previous().lexeme);
+        if (match(TokenType.IDENT))
             return new Var(previous().lexeme);
-        if (match(L_PAREN)) {
-            Expr e = expression();
-            consume(R_PAREN, "Expected ')'");
-            return new Grouping(e);
+        if (match(TokenType.LPAREN)) {
+            Expr expr = expression();
+            consume(TokenType.RPAREN, "Expected ')' after expression");
+            return new Grouping(expr);
         }
-        error(peek(), "Expected expression");
-        return null; // unreachable
+        throw error(peek(), "Expected expression");
     }
 
-    // ---- helpers ----
+    // ===== helpers =====
+
     private boolean match(TokenType... types) {
-        for (TokenType t : types) {
-            if (check(t)) {
+        for (TokenType type : types) {
+            if (check(type)) {
                 advance();
                 return true;
             }
@@ -170,33 +175,44 @@ public class Parser {
         return false;
     }
 
-    private boolean check(TokenType t) {
-        return peek().type == t;
+    private boolean check(TokenType type) {
+        if (isAtEnd())
+            return false;
+        return peek().type == type;
+    }
+
+    private boolean checkNext(TokenType type) {
+        if (current + 1 >= tokens.size())
+            return false;
+        return tokens.get(current + 1).type == type;
     }
 
     private Token advance() {
-        if (!check(EOF))
-            pos++;
+        if (!isAtEnd())
+            current++;
         return previous();
     }
 
+    private boolean isAtEnd() {
+        return peek().type == TokenType.EOF;
+    }
+
     private Token peek() {
-        return ts.get(pos);
+        return tokens.get(current);
     }
 
     private Token previous() {
-        return ts.get(pos - 1);
+        return tokens.get(current - 1);
     }
 
-    private Token consume(TokenType t, String msg) {
-        if (check(t))
+    private Token consume(TokenType type, String message) {
+        if (check(type))
             return advance();
-        error(peek(), msg);
-        return null;
+        throw error(peek(), message);
     }
 
-    private void error(Token at, String msg) {
-        throw new RuntimeException(
-                "Parse error at " + at.line + ":" + at.col + " - " + msg + " (found " + at.type + ")");
+    private RuntimeException error(Token token, String message) {
+        return new RuntimeException("Parser error at " + token.line + ":" + token.column +
+                " near '" + token.lexeme + "': " + message);
     }
 }

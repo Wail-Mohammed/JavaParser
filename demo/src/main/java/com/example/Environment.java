@@ -1,53 +1,56 @@
 package com.example;
 
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
 
-class Environment {
+public class Environment {
     private final Deque<Map<String, Integer>> scopes = new ArrayDeque<>();
 
-    Environment() {
-        scopes.push(new HashMap<>());
-    } // global
+    public Environment() {
+        scopes.push(new HashMap<>()); // global scope
+    }
 
-    void push() {
+    public void push() {
         scopes.push(new HashMap<>());
     }
 
-    void pop() {
+    public void pop() {
         scopes.pop();
     }
 
-    boolean isDeclaredHere(String name) {
-        return scopes.peek().containsKey(name);
+    public void declare(String name, int value) {
+        Map<String, Integer> top = scopes.peek();
+        if (top.containsKey(name)) {
+            throw new RuntimeException("Variable '" + name + "' already declared in this scope");
+        }
+        top.put(name, value);
     }
 
-    void declare(String name, int value) {
-        if (isDeclaredHere(name))
-            throw new RuntimeException("Semantic error: variable '" + name + "' already declared in this scope");
-        scopes.peek().put(name, value);
-    }
-
-    boolean contains(String name) {
-        for (var m : scopes)
-            if (m.containsKey(name))
+    public boolean contains(String name) {
+        for (Map<String, Integer> scope : scopes) {
+            if (scope.containsKey(name))
                 return true;
+        }
         return false;
     }
 
-    int get(String name) {
-        for (var m : scopes)
-            if (m.containsKey(name))
-                return m.get(name);
-        throw new RuntimeException("Semantic error: variable '" + name + "' not declared");
+    public int get(String name) {
+        for (Map<String, Integer> scope : scopes) {
+            if (scope.containsKey(name))
+                return scope.get(name);
+        }
+        throw new RuntimeException("Variable '" + name + "' not declared");
     }
 
-    void set(String name, int value) {
-        for (var m : scopes) {
-            if (m.containsKey(name)) {
-                m.put(name, value);
+    public void set(String name, int value) {
+        for (Map<String, Integer> scope : scopes) {
+            if (scope.containsKey(name)) {
+                scope.put(name, value);
                 return;
             }
         }
-        throw new RuntimeException("Semantic error: variable '" + name + "' not declared");
+        throw new RuntimeException("Variable '" + name + "' not declared");
     }
 }
